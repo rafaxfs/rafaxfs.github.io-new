@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code & UTF-8 Decoder</title>
+    <!-- Library jsQR untuk membaca gambar QR Code -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 30px 15px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: #ffffff;
+            max-width: 550px;
+            width: 100%;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        }
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            text-align: center;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #34495e;
+        }
+        input[type="file"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #cccccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 90px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        .divider {
+            text-align: center;
+            margin: 15px 0;
+            font-weight: bold;
+            color: #7f8c8d;
+            position: relative;
+        }
+        button {
+            width: 100%;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #result-box {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+            word-break: break-all;
+        }
+        .success {
+            background-color: #e8f8f5;
+            border: 1px solid #2ecc71;
+            color: #27ae60;
+        }
+        .error {
+            background-color: #fdf2e9;
+            border: 1px solid #e74c3c;
+            color: #c0392b;
+        }
+        .link-btn {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 10px 15px;
+            background-color: #27ae60;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .link-btn:hover {
+            background-color: #219150;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>QR Code & Text Decoder</h2>
+    
+    <!-- Opsi 1: Upload Gambar QR Code -->
+    <div class="section">
+        <label for="qr-image">1. Unggah Gambar QR Code:</label>
+        <input type="file" id="qr-image" accept="image/*">
+    </div>
+
+    <div class="divider">ATAU</div>
+
+    <!-- Opsi 2: Manual UTF-8 / Textbox Input -->
+    <div class="section">
+        <label for="manual-text">2. Input Teks / UTF-8 Manual:</label>
+        <textarea id="manual-text" placeholder="Masukkan string UTF-8 / Base64 di sini..."></textarea>
+    </div>
+
+    <button onclick="processDecode()">Proses Decode</button>
+
+    <!-- Hasil / Output -->
+    <div id="result-box"></div>
+</div>
+
+<script>
+    const TARGET_PREFIX = "https://forms.gle";
+
+    // Fungsi utama untuk menangani pemrosesan
+    function processDecode() {
+        const fileInput = document.getElementById('qr-image');
+        const manualInput = document.getElementById('manual-text').value.trim();
+        
+        if (fileInput.files && fileInput.files[0]) {
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0, img.width, img.height);
+                    
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height);
+                    
+                    if (code && code.data) {
+                        validateAndShow(code.data);
+                    } else {
+                        showError("Gagal membaca QR Code dari gambar. Pastikan gambar jelas.");
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        } else if (manualInput !== "") {
+            validateAndShow(manualInput);
+        } else {
+            showError("Silakan unggah gambar QR Code atau masukkan teks manual.");
+        }
+    }
+
+    // Fungsi dekode berulang (menangani multi-layer Base64/UTF-8)
+    function decodeUntilUrl(rawInput) {
+        let current = rawInput;
+        let attempts = 0;
+        
+        while (attempts < 10) {
+            if (current.toLowerCase().includes("forms.gle")) {
+                return current;
+            }
+            try {
+                // Mencoba dekode Base64 ke UTF-8
+                let decoded = atob(current);
+                // Menangani konversi UTF-8 karakter khusus
+                let utf8Decoded = decodeURIComponent(escape(decoded));
+                if (utf8Decoded === current) break;
+                current = utf8Decoded;
+            } catch (e) {
+                break;
+            }
+            attempts++;
+        }
+        return current;
+    }
+
+    // Fungsi validasi target URL
+    function validateAndShow(inputData) {
+        const finalUrl = decodeUntilUrl(inputData);
+
+        if (finalUrl.includes("forms.gle")) {
+            showSuccess(finalUrl);
+        } else {
+            showError("Akses Ditolak: QR-Code / Teks tidak mengarah ke Link Google Forms (https://forms.gle/...). Decoder dibatalkan.");
+        }
+    }
+
+    function showSuccess(url) {
+        const resultBox = document.getElementById('result-box');
+        resultBox.className = "success";
+        resultBox.style.display = "block";
+        resultBox.innerHTML = `
+            <strong>Dekode Berhasil!</strong><br>
+            Link Tujuan Found:<br>
+            <code>${url}</code><br><br>
+            <a href="${url}" target="_blank" class="link-btn">Buka Link Google Form</a>
+        `;
+    }
+
+    function showError(message) {
+        const resultBox = document.getElementById('result-box');
+        resultBox.className = "error";
+        resultBox.style.display = "block";
+        resultBox.innerHTML = `<strong>Error:</strong> ${message}`;
+    }
+</script>
+
+</body>
+</html>
